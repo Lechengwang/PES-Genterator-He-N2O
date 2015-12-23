@@ -3,7 +3,7 @@
 #ARTICLE INFORMATION 
 
 Journal:	Journal of Chemical Physics
-Year:  	2012, Vol. 137/x, Issue xx
+Year:  	2012, Vol. 137, Page 104311
 Author(s): 	L. Wang, D. Xie, R. J. Le Roy and P.-N. Roy
 
 Title: 

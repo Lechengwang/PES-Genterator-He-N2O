@@ -23,7 +23,7 @@ Total No. of Files:		3
 
 Filenames:   			README.md  N2O_He_4D_PES.f.txt  N2O_He_2D_PES.f.txt
 
-#CONTACT INFORMATION: 
+#CONTACT INFORMATION 
 Lecheng Wang, David R. Cheriton School of Computer Science, University of Waterloo, Waterloo, Ontario, N2L 3G1, Canada
                      e=mail:  lecheng.wang@uwaterloo.ca
 

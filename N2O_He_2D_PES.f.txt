@@ -1,0 +1,315 @@
+      IMPLICIT REAL*8 (A-H,O-Z)
+      iv3=0  !iv3=0 and 1 for the ground and excited vibrational state of N2O correspondingly
+
+C     Initialized fitting parameters before calculation
+      CALL PARAREAD(iv3)
+
+      OPEN(11,FILE='he-n2o-pes.chk')
+      Do TH=0.0D0, 180.0D0, 15.0D0
+      DO R=3.D0, 10.0D0, .5D0
+        CALL  HEN2OPES(R,TH,VCAL)
+        WRITE(11,663)TH,R,VCAL
+      ENDDO
+      ENDDO
+ 663  FORMAT(1x,f8.2,f7.1,f20.4)
+      END
+c=============================================
+      
+   
+c***************************************************
+      SUBROUTINE HEN2OPES(R,TH,YC)
+c***************************************************
+c  Subroutine to generate values of the vibrationally averaged 
+c  2D-MLR analyic potential energy surfaces for complexes formed 
+c  between He and N2O isotopologues {14}N2{16}O in vibrational 
+c  level v3= 0 or 1, as determined by:
+c    Lecheng Wang, Daiqian Xie, Pierre-Nicholas Roy,
+c    and Robert J. Le Roy [JCP, (2012, in press)]. 
+
+c  Before first call, call input subroutine pararead(iv3) for 
+c  parameters(depend on the vibrational state (iv3) of N2O)
+c  of MLR functions; 
+c-------------------
+c** Input variables:
+c-------------------
+c R - distance between N2O and He centre of mass in [Angst], 
+c pointing from the center of mass of N2O to He.
+c TH - Jacobi angular coordinate 'theta' in degrees, which is the 
+c angle between the vector R pointing from the center of mass 
+c of N2O to He and the vector pointing from O atom to N. 
+c---------------------
+c** Output:   YC [cm-1]  is the calculated interaction energy '\Delta{V}'.
+c----------------------------------------------------
+
+      INTEGER MXDATA, MXPARM, NPMAX, MXN, MXL
+      PARAMETER (MXDATA=15000, MXPARM=80, NPMAX=20,MXN=20,MXL=20)
+
+      INTEGER NPHI(NPMAX),LCM(0:MXN),I,J,K,L,M,IP,
+     1 IDAT,NDATA,p,q,NDE,NRE,NCN,MCM,MMN,NS,NL,NPOW,NPS
+
+      REAL*8  R,TH,YC,PV(MXPARM),
+     1  Re,De,Vasy,RREF,AREF,AREFp,AREFq,Rep,CN,RC6,RCN,VLRe,
+     2  phiINF,RTPp,RTPq,yp,yq,ype,yPOW,XP,SUM,
+     3  XDE,XRE,VLR,XPW
+
+      REAL*8 Pn(0:NPMAX+1),PHI(NPMAX),RCM(MXN,0:MXL) 
+      COMMON /DATABLK/RCM,RREF,CN,
+     1 NPHI,LCM,p,q,NDE,NRE,NCN,MCM,NS,NL,PV
+c=======================================================================
+c  For the case of an  MLR_{p}  potential ...
+c-----------------------------------------------------------------------
+
+       PI=DACOS(-1.0D0)
+       CTH=DCOS(TH*PI/180.0D0)
+
+       Pn(0)=1.
+       Pn(1)=CTH
+       DO I=1,NPMAX
+        Pn(I+1)=((2.0d0*I+1.0d0)*CTH*Pn(I)
+     1                         -dfloat(I)*Pn(I-1))/dfloat(I+1)
+       ENDDO 
+c caculate the derivative of the parameters of De not including
+c the coefficient before, only the Legendre expansion.
+
+       De=0.0d0
+       DO I=0,NDE-1
+         De=De+Pn(I)*PV(I+1)
+       ENDDO 
+       
+c caculate the derivative of the parameters of Re not including
+c the coefficient before, only the Legendre expansion.
+
+       Re=0.0d0
+       IP=NDE
+       DO I=0,NRE-1
+          IP=IP+1
+          Re=Re+Pn(I)*PV(IP)
+       ENDDO  
+
+       AREF= RREF*Re
+       IF(RREF.LE.0.d0) AREF= Re
+       AREFp= AREF**p
+       AREFq= AREF**q
+       Rep= Re**p
+c only included the C6 coefficient 
+       RC6=0.0D0
+       DO L=0,LCM(NCN),2
+        RC6=RC6+RCM(NCN,L)*Pn(L)
+       ENDDO  
+       VLRe= CN*RC6/Re**NCN
+c included the higher order coefficients such as C7, C8, C9,C10 etc.
+      IF(MCM.GT.NCN) THEN
+       MMN=MCM-NCN
+c      IF(p.LE.MMN)THEN MMN=0
+      IF(MMN.GT.0) THEN
+       RCN=0.0D0
+       DO M=NCN,MCM
+         IF (MOD(M,2).eq.0) then
+           DO L=0,LCM(M),2
+             RCN=RCN+(RCM(M,L)*Pn(L))/Re**(M-NCN)
+           ENDDO 
+         ELSE
+           DO L=1,LCM(M),2
+             RCN=RCN+(RCM(M,L)*Pn(L))/Re**(M-NCN)
+           ENDDO
+         ENDIF
+         ENDDO 
+         VLRe= CN*RCN/Re**NCN
+      ENDIF
+      ENDIF  
+
+       phiINF= DLOG(2.d0*De/VLRe)
+
+       RTPp= R**p
+       RTPq= R**q
+       yp= (RTPp - AREFp)/(RTPp + AREFp)
+       yq= (RTPq - AREFq)/(RTPq + AREFq)
+       ype= (RTPp - Rep)/(RTPp + Rep)
+ 
+c caculate the derivative of the parameters of PHI(N) not including
+c the coefficient before, the Legendre expansion and exponent expansion.
+
+       NPOW= NS+1
+       IF(R.GE.Re) NPOW= NL+1
+        yPOW= 1.d0 - yp
+        SUM=0.0 
+        NPS=0
+        IP=NDE+NRE
+        DO J=1,NPOW
+          IP=IP+1
+          PHI(J)= PV(IP)*Pn(0)
+           DO  K=2,NPHI(J)
+             IP=IP+1
+            PHI(J)=PHI(J)+ PV(IP)*Pn(K-1)
+           ENDDO
+        NPS=NPS+NPHI(J)
+        SUM=SUM+PHI(J)*yq**(J-1)
+        ENDDO
+
+c caculate the derivative of the parameters of Vasy 
+
+        IP=NDE+NRE+NPS
+        Vasy=PV(IP+1) 
+
+        XP= SUM*yPOW+ phiINF*yp
+
+
+c only included the C6 coefficient 
+       VLR= CN*RC6/R**NCN
+c included the higher order coefficients such as C7, C8, C9,C10 etc.
+      IF(MCM.GT.NCN) THEN
+       RCN=0.0D0
+       DO M=NCN,MCM
+         IF (MOD(M,2).eq.0) then
+           DO L=0,LCM(M),2
+             RCN=RCN+(RCM(M,L)*Pn(L))/R**(M-NCN)
+             ENDDO
+         ELSE
+           DO L=1,LCM(M),2
+             RCN=RCN+(RCM(M,L)*Pn(L))/R**(M-NCN)
+             ENDDO
+         ENDIF
+         ENDDO
+         VLR= CN*RCN/R**NCN
+       ENDIF 
+
+         XPW= DEXP(-XP*ype) * VLR/VLRe
+         YC= De*(1.d0 - XPW)**2-De+Vasy 
+
+      RETURN
+      END
+
+c-----------------------------------------------------------------------
+      SUBROUTINE PARAREAD(iv3)
+      INTEGER MXDATA, MXPARM, NPMAX, MXN, MXL
+      PARAMETER (MXDATA=15000, MXPARM=80, NPMAX=20,MXN=20,MXL=20)
+      INTEGER iv3
+      CHARACTER*21 FNAME
+      CHARACTER*1  FA
+      CHARACTER*19 FB
+      PARAMETER (FA='v',FB='-hen2o-mlr-para.txt')
+      INTEGER NPHI(NPMAX),LCM(0:MXN),I,J,K,L,M,IP,
+     1  p,q,NDE,NRE,NCN,MCM,NS,NL,NPOW,NPS
+      REAL*8  PV(MXPARM),RCM(MXN,0:MXL)
+      REAL*8  RREF,CN,PI
+C     FOR GROUND AND EXCITED STATE OF N2O
+      REAL*8  VRCM(2,MXN,0:MXL)
+      REAL*8  VCN(2)
+      REAL*8  VPV(2,MXPARM)
+   
+      COMMON /DATABLK/RCM,RREF,CN,
+     1 NPHI,LCM,p,q,NDE,NRE,NCN,MCM,NS,NL,PV
+
+      FNAME=FA//CHAR(iv3+48)//FB
+      OPEN(5,FILE=FNAME)
+      DATA NDE/19/
+      DATA NRE/15/
+      DATA p/5/
+      DATA q/3/
+      DATA NS/4/
+      DATA NL/4/
+      DATA RREF/0.D0/
+      DATA (NPHI(I),I=1,5) /9,7,5,3,1/
+      DATA NCN/6/
+      DATA (VCN(I),I=1,2) /7.7784785d4,7.8341258d4/
+      DATA MCM/10/
+      DATA (LCM(I),I=6,10,1) /2,3,4,5,6/
+      DATA (VRCM(1,6,I),I=0,2,2) /1.D0,0.30318942D0/
+      DATA (VRCM(1,7,I),I=1,3,2) /0.56341392D0,0.03768641/
+      DATA (VRCM(1,8,I),I=0,4,2) /7.60152758D0,14.34320982D0,
+     & 0.99323324D0/
+      DATA (VRCM(1,9,I),I=1,5,2) /10.14685721D0,7.30704469D0,
+     & 0.31895526D0/
+      DATA (VRCM(1,10,I),I=0,6,2) /61.70624065D0,149.39365362D0,
+     & 48.10951103D0,-0.24027865D0/
+      DATA (VRCM(2,6,I),I=0,2,2) /1.D0,0.30336186/
+      DATA (VRCM(2,7,I),I=1,3,2) /0.56341392,0.03768641/
+      DATA (VRCM(2,8,I),I=0,4,2) /7.60152758D0,14.34320982D0,
+     & 0.99323324D0/
+      DATA (VRCM(2,9,I),I=1,5,2) /10.14685721D0,7.30704469D0,
+     & 0.31895526D0/
+      DATA (VRCM(2,10,I),I=0,6,2) /61.70624065D0,149.39365362D0,
+     & 48.10951103D0,-0.24027865D0/
+
+
+      DATA (VPV(1,I),I=1,60) /
+     &   3.423600D+01, -3.299000D+00, -2.134900D+01,
+     &   5.300000D-01,  2.212000D+01, -4.540000D+00,
+     &  -1.288000D+01,  3.090000D+00,  7.730000D+00,
+     &  -2.670000D+00, -3.800000D+00,  1.750000D+00,
+     &   1.770000D+00, -1.100000D+00, -7.000000D-01,
+     &   5.800000D-01,  2.300000D-01, -1.800000D-01,
+     &  -5.000000D-02,  3.633010D+00,  1.521000D-01,
+     &   9.496000D-01,  1.650000D-02, -3.549000D-01,
+     &   5.960000D-02,  1.245000D-01, -3.090000D-02,
+     &  -4.170000D-02,  1.720000D-02,  3.900000D-03,
+     &  -5.400000D-03,  5.300000D-03,  9.000000D-04,
+     &  -4.100000D-03, -1.974000D-01,  1.130000D-01,
+     &   3.290000D-01, -2.000000D-03,  7.400000D-02,
+     &   1.700000D-02, -6.800000D-02, -8.000000D-03,
+     &   4.500000D-02,  2.280000D-01, -2.170000D-01,
+     &   2.790000D-01,  5.000000D-02, -5.000000D-02,
+     &  -5.000000D-02, -1.000000D-02, -3.200000D-01,
+     &  -6.500000D-01,  2.600000D-01,  3.000000D-02,
+     &  -5.000000D-02,  5.700000D-01, -1.100000D+00,
+     &   4.000000D-01, -3.000000D-01,  0.000000D+00/
+
+      DATA (VPV(2,I),I=1,60) /
+     &   3.408000D+01, -3.340000D+00, -2.092400D+01,
+     &   6.100000D-01,  2.180000D+01, -4.630000D+00,
+     &  -1.254000D+01,  3.120000D+00,  7.520000D+00,
+     &  -2.680000D+00, -3.650000D+00,  1.740000D+00,
+     &   1.700000D+00, -1.090000D+00, -6.700000D-01,
+     &   5.800000D-01,  2.200000D-01, -1.800000D-01,
+     &  -4.000000D-02,  3.636700D+00,  1.531000D-01,
+     &   9.476000D-01,  1.430000D-02, -3.536000D-01,
+     &   6.140000D-02,  1.222000D-01, -3.120000D-02,
+     &  -4.110000D-02,  1.720000D-02,  3.600000D-03,
+     &  -5.200000D-03,  5.400000D-03,  8.000000D-04,
+     &  -4.000000D-03, -1.970000D-01,  1.130000D-01,
+     &   3.280000D-01, -3.000000D-03,  7.500000D-02,
+     &   1.700000D-02, -6.700000D-02, -8.000000D-03,
+     &   4.600000D-02,  2.250000D-01, -2.170000D-01,
+     &   2.710000D-01,  4.000000D-02, -4.000000D-02,
+     &  -4.000000D-02, -2.000000D-02, -3.400000D-01,
+     &  -6.400000D-01,  2.700000D-01,  4.000000D-02,
+     &  -5.000000D-02,  6.100000D-01, -1.100000D+00,
+     &   5.000000D-01, -2.000000D-01,  0.000000D+00/
+
+C FOR GROUND AND EXCITED VIBRATIONAL STATE OF N2O
+      IF(IV3.EQ.0) THEN
+       CN=VCN(1)
+       DO I=1,60
+        PV(I)=VPV(1,I)
+       ENDDO
+       DO J=NCN,MCM
+        IF (MOD(J,2).eq.0) then
+         DO I=0,LCM(J),2
+         RCM(J,I)=VRCM(1,J,I)
+         ENDDO
+        ELSE
+         DO I=1,LCM(J),2
+         RCM(J,I)=VRCM(1,J,I)
+         ENDDO
+        ENDIF
+       ENDDO
+      ELSE
+       CN=VCN(2)
+       DO I=1,60
+        PV(I)=VPV(2,I)
+       ENDDO
+       DO J=NCN,MCM
+        IF (MOD(J,2).eq.0) then
+         DO I=0,LCM(J),2
+         RCM(J,I)=VRCM(2,J,I)
+         ENDDO
+        ELSE
+         DO I=1,LCM(J),2
+         RCM(J,I)=VRCM(2,J,I)
+         ENDDO
+        ENDIF
+       ENDDO
+      ENDIF
+
+      RETURN
+      END
